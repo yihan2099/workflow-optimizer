@@ -17,7 +17,7 @@ Save current measurement results as a baseline snapshot.
 /baseline my-workflow save
 ```
 
-Reads the latest results from `.skill-optimizer/{workflow-id}/baseline.md` and copies to `.skill-optimizer/{workflow-id}/snapshots/{date}.md`.
+Reads the latest results from `.workflow-optimizer/{workflow-id}/baseline.md` and copies to `.workflow-optimizer/{workflow-id}/snapshots/{date}.md`.
 
 ### load
 
@@ -27,7 +27,7 @@ Load the most recent snapshot.
 /baseline my-workflow load
 ```
 
-Reads the latest file from `.skill-optimizer/{workflow-id}/snapshots/`.
+Reads the latest file from `.workflow-optimizer/{workflow-id}/snapshots/`.
 
 ### list
 
@@ -48,7 +48,7 @@ Snapshots for my-workflow:
 ## Storage Layout
 
 ```
-.skill-optimizer/
+.workflow-optimizer/
   {workflow-id}/
     baseline.md              # Current metrics (written by measure/optimize)
     snapshots/

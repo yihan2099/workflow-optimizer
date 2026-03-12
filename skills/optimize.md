@@ -111,7 +111,7 @@ Agent 2: runs 2, 5, 8...
 Agent 3: runs 3, 6, 9...
 ```
 
-Each agent writes results to `.skill-optimizer/{workflow-id}/runs/run-{i}.md`.
+Each agent writes results to `.workflow-optimizer/{workflow-id}/runs/run-{i}.md`.
 
 ### Aggregate Metrics
 
@@ -123,7 +123,7 @@ After all runs complete, compute:
 | Avg duration | mean(duration_ms) |
 | Failure distribution | count per error category |
 
-Write aggregate to `.skill-optimizer/{workflow-id}/baseline.md` (first iteration) or compare against it (subsequent iterations).
+Write aggregate to `.workflow-optimizer/{workflow-id}/baseline.md` (first iteration) or compare against it (subsequent iterations).
 
 If `--baseline-only`, print the report and **STOP**.
 
@@ -248,7 +248,7 @@ COMPARISON:
 
 ## Phase 9: Save Iteration
 
-Write to `.skill-optimizer/{workflow-id}/iterations/iter-{N}.md`:
+Write to `.workflow-optimizer/{workflow-id}/iterations/iter-{N}.md`:
 
 ```markdown
 # Iteration {N} — {date}
@@ -268,7 +268,7 @@ Write to `.skill-optimizer/{workflow-id}/iterations/iter-{N}.md`:
 | TIMEOUT | 3 | 1 | -2 |
 ```
 
-Update `.skill-optimizer/{workflow-id}/baseline.md` with the new metrics.
+Update `.workflow-optimizer/{workflow-id}/baseline.md` with the new metrics.
 
 ---
 
@@ -287,7 +287,7 @@ Otherwise, loop back to Phase 3.
 ## Storage Layout
 
 ```
-.skill-optimizer/
+.workflow-optimizer/
   {workflow-id}/
     baseline.md              # Latest aggregate metrics
     iterations/

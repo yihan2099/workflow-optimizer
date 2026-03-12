@@ -1,4 +1,4 @@
-# skill-optimizer
+# workflow-optimizer
 
 A methodology for iteratively measuring and optimizing agent workflows. Defined as markdown skills that any LLM agent can pick up and execute.
 
@@ -53,10 +53,10 @@ See [workflow-definition.md](workflow-definition.md) for the full spec.
 
 ## Storage
 
-All optimization data is stored in `.skill-optimizer/` relative to where the skill is invoked:
+All optimization data is stored in `.workflow-optimizer/` relative to where the skill is invoked:
 
 ```
-.skill-optimizer/
+.workflow-optimizer/
   {workflow-id}/
     baseline.md              # Latest aggregate metrics
     snapshots/
@@ -70,6 +70,6 @@ All optimization data is stored in `.skill-optimizer/` relative to where the ski
 
 - **Self-contained skills** — Each skill has all logic inline, no cross-skill invocation
 - **Agent-native** — Written for LLM agents to follow, not humans to run
-- **File-based data flow** — Results persist to `.skill-optimizer/` as markdown files
+- **File-based data flow** — Results persist to `.workflow-optimizer/` as markdown files
 - **Parallel-capable** — Measurement runs can use Agent tool for concurrency
 - **Universal** — Works with shell commands, agent prompts, or HTTP APIs

@@ -48,7 +48,7 @@ If a run exceeds the timeout, mark it as FAIL with error "TIMEOUT".
 
 ### Parallel Runs
 
-For workflows with no shared state between runs, use the `Agent` tool to run subsets concurrently (up to 3 agents). Each agent writes results to `.skill-optimizer/{workflow-id}/runs/run-{i}.md`.
+For workflows with no shared state between runs, use the `Agent` tool to run subsets concurrently (up to 3 agents). Each agent writes results to `.workflow-optimizer/{workflow-id}/runs/run-{i}.md`.
 
 ## Phase 3: Aggregate
 
@@ -76,4 +76,4 @@ Compute across all N runs:
 
 ## Output
 
-Write results to `.skill-optimizer/{workflow-id}/baseline.md` with the aggregate metrics and per-run details.
+Write results to `.workflow-optimizer/{workflow-id}/baseline.md` with the aggregate metrics and per-run details.
