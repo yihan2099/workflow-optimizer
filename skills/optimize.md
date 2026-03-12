@@ -1,153 +1,312 @@
 ---
 name: optimize
-description: Full optimization loop. Measures a workflow, categorizes failures, applies fixes, and re-measures until target metrics are hit or max iterations reached.
+description: Closed-loop workflow optimization. Runs a workflow N times, categorizes failures, applies fixes, re-measures until target success rate or max iterations.
 argument-hint: "<workflow-path> [--runs 5] [--target-rate 0.8] [--max-iterations 5] [--baseline-only]"
+allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent
 ---
 
 # Optimize — Closed-Loop Workflow Improvement
 
+All logic is inline — this skill does NOT invoke other skills.
+
 ## Input Parsing
 
-1. **workflow-path** — path to the workflow definition (workflow.md)
+1. **workflow-path** — path to `workflow.md`
 2. **--runs N** (default: 5) — runs per iteration
 3. **--target-rate N** (default: 0.8) — target success rate (0.0–1.0)
 4. **--max-iterations N** (default: 5) — max fix-and-retest cycles
 5. **--stagnation-limit N** (default: 3) — stop after N iterations with no improvement
-6. **--baseline-only** — measure once and stop, no optimization loop
+6. **--baseline-only** — measure once and stop
 
 ## The Loop
 
 ```
-1. BASELINE: measure(workflow, runs=N)
-2. CHECK: if success_rate >= target → DONE
-3. CATEGORIZE: bucket failures
-4. FILTER: only fixable categories
-5. FIX: apply fixes from workflow's fixer.md
-6. REBUILD: if workflow requires rebuild (e.g., Docker)
-7. REMEASURE: measure(updated_workflow, runs=N)
-8. COMPARE: diff(previous_metrics, new_metrics)
-9. SAVE: persist iteration result
-10. CHECK STAGNATION: if no improvement for K iterations → STOP
-11. LOOP back to step 2
+LOAD workflow.md
+  ↓
+MEASURE (N runs)
+  ↓
+success_rate >= target? ──YES──→ DONE
+  │ NO
+  ↓
+CATEGORIZE failures
+  ↓
+all unfixable? ──YES──→ STOP (explain why)
+  │ NO
+  ↓
+FIX (apply fixer.md for dominant category)
+  ↓
+REBUILD (if workflow requires it)
+  ↓
+REMEASURE (N runs)
+  ↓
+COMPARE (before vs after)
+  ↓
+SAVE iteration
+  ↓
+stagnant for K iterations? ──YES──→ STOP
+  │ NO
+  ↓
+LOOP back to success_rate check
 ```
 
-## Phase 1: Baseline
+---
 
-Use the `measure` skill to run the workflow N times.
+## Phase 1: Load Workflow
 
-```
-/measure <workflow-path> --runs N
-```
+Read the `workflow.md` file. Extract these required fields:
 
-Save the result as the baseline. If `--baseline-only`, print the report and STOP.
+| Field | Description |
+|-------|-------------|
+| **Run Command** | Shell command, API call, or agent prompt template |
+| **Success Criteria** | How to check if a run passed (exit code, output pattern, URL pattern) |
+| **Fixtures** | Test inputs substituted into the run command |
+| **Constraints** | Timeout (ms), max turns (agent workflows) |
 
-## Phase 2: Check Target
+Optional fields:
+- **Rebuild Command** — command to run after applying fixes (e.g., Docker rebuild)
+- **Setup Command** — one-time setup before first run
 
-If `success_rate >= target_rate`, the workflow already meets the target. Print summary and STOP.
+If a setup command exists, run it now.
 
-## Phase 3: Categorize
+Also check for `fixer.md` in the same directory as `workflow.md`. This is where domain-specific fix instructions live.
 
-Use the `categorize` skill on the failed runs.
+---
 
-```
-/categorize <results>
-```
+## Phase 2: Measure
 
-If all failures are non-fixable (AUTH, RATE_LIMIT), STOP with explanation.
+Run the workflow N times and collect structured results.
 
-## Phase 4: Fix
+### Executing Each Run
 
-Read the workflow's `fixer.md` file. This file defines how to fix each failure category for this specific workflow. The fixer is where domain knowledge lives.
+For each run `i` in `1..N`:
+1. Pick fixture via round-robin: `fixtures[i % fixtures.length]`
+2. Substitute fixture values into the run command template
+3. Execute and capture: exit code, stdout, stderr, wall-clock duration
+4. Check success criteria against the output
+5. Record the result
 
-Example fixer.md structure:
+### Run Result Format
+
 ```markdown
-# Fixer: post-to-twitter
+## Run {i}
+- **Fixture**: {fixture_id}
+- **Success**: PASS / FAIL
+- **Duration**: {ms}ms
+- **Error**: {error message or "none"}
+- **Output** (truncated to 500 chars): {stdout}
+```
+
+### Timeout Handling
+
+If a run exceeds the workflow's timeout constraint, kill it and record `error: "TIMEOUT"`.
+
+### Parallel Runs (Optional)
+
+For independent runs (no shared state between runs), use the `Agent` tool to run multiple fixtures concurrently:
+
+```
+Spawn up to 3 agents, each running a subset of the N runs.
+Agent 1: runs 1, 4, 7...
+Agent 2: runs 2, 5, 8...
+Agent 3: runs 3, 6, 9...
+```
+
+Each agent writes results to `.skill-optimizer/{workflow-id}/runs/run-{i}.md`.
+
+### Aggregate Metrics
+
+After all runs complete, compute:
+
+| Metric | Formula |
+|--------|---------|
+| Success rate | pass_count / N |
+| Avg duration | mean(duration_ms) |
+| Failure distribution | count per error category |
+
+Write aggregate to `.skill-optimizer/{workflow-id}/baseline.md` (first iteration) or compare against it (subsequent iterations).
+
+If `--baseline-only`, print the report and **STOP**.
+
+---
+
+## Phase 3: Check Target
+
+If `success_rate >= target_rate` → print summary and **STOP**. The workflow already meets the goal.
+
+---
+
+## Phase 4: Categorize Failures
+
+For each failed run, match the error text against these patterns (first match wins):
+
+| Category | Patterns | Fixable? |
+|----------|----------|----------|
+| AUTH | logged out, sign in, expired session, unauthorized | No — needs manual re-login |
+| RATE_LIMIT | 429, rate limit, too many requests | No — wait required |
+| TIMEOUT | timeout, timed out, deadline, turn limit exceeded | Yes |
+| UI_CHANGE | selector not found, element not found, no such element | Yes |
+| TIMING | not ready, loading, spinner, pending | Yes |
+| CONTENT | text empty, failed to type, paste fail | Yes |
+| BROWSER | browser crash, chromium, target closed, page closed | Partial |
+| UNKNOWN | (no pattern matched) | Review needed |
+
+Output a failure distribution:
+
+```
+Failures (3/5 runs):
+  TIMEOUT    2  (fixable)
+  AUTH       1  (not fixable)
+Fixable: 2/3 (67%)
+```
+
+If ALL failures are unfixable (AUTH, RATE_LIMIT) → **STOP** with explanation.
+
+---
+
+## Phase 5: Fix
+
+### With fixer.md (Recommended)
+
+If the workflow directory contains `fixer.md`, read it. The fixer maps each failure category to specific fix instructions for this workflow.
+
+Example fixer.md:
+```markdown
+# Fixer: my-workflow
 
 ## TIMEOUT
 - Chain sequential commands with &&
-- Replace state+click with eval-based clicks
-- Remove unnecessary screenshots
+- Remove unnecessary intermediate steps
 
 ## TIMING
-- Add sleep 2 before button clicks
+- Add sleep 2 before element interactions
 - Add retry loop for NOT_READY elements
 
 ## UI_CHANGE
-- Inspect current DOM structure
-- Update querySelector selectors in prompt
-
-## CONTENT
-- Switch from IIFE to var-assignment pattern
-- Use Array.from() instead of spread
+- Inspect current page structure
+- Update selectors in the run command/prompt
 ```
 
-Apply the fixes described for the dominant failure category. Make surgical changes — don't rewrite everything.
+Apply fixes for the **dominant failure category** (highest count). Make surgical changes — don't rewrite everything.
 
-## Phase 5: Rebuild (If Needed)
+### Without fixer.md (Auto-Fix)
 
-If the workflow requires a rebuild step (e.g., Docker container), run it:
+If no fixer.md exists, apply generic fixes based on category:
 
-```
-# Defined in workflow.md under "Rebuild Command"
+| Category | Generic Fix |
+|----------|------------|
+| TIMEOUT | Reduce steps, chain commands, increase timeout |
+| TIMING | Add waits/retries before interactions |
+| UI_CHANGE | Read current page/API and update selectors |
+| CONTENT | Switch input method, add validation |
+
+After fixing, update the workflow's run command or prompt accordingly.
+
+---
+
+## Phase 6: Rebuild
+
+If the workflow defines a **Rebuild Command** in `workflow.md`, run it now:
+
+```bash
+# Example: Docker-based workflow
 docker stop my-container && docker rm my-container
 docker build -t my-image .
 docker run -d --name my-container ...
 ```
 
-## Phase 6: Remeasure
+Skip this phase if no rebuild command is defined.
 
-Use the `measure` skill again with the updated workflow.
+---
 
-## Phase 7: Compare
+## Phase 7: Remeasure
 
-Use the `compare` skill to diff previous vs current metrics.
+Run Phase 2 again with the updated workflow. Same N runs, same fixtures.
+
+---
+
+## Phase 8: Compare
+
+Compute deltas between previous and current metrics:
+
+| Metric | Before | After | Delta | Better if |
+|--------|--------|-------|-------|-----------|
+| Success rate | | | | Higher |
+| Avg duration | | | | Lower |
+
+**Improved** = success rate increased, OR same rate with lower duration.
+**Regressed** = success rate decreased.
+**Stagnant** = no meaningful change.
 
 ```
-/compare <previous-metrics> <current-metrics>
+COMPARISON:
+  Success Rate   60.0% → 80.0%  (+20.0%)
+  Avg Duration   185s  → 120s   (-65s)
+  Verdict: IMPROVED
 ```
 
-## Phase 8: Save Iteration
+---
 
-Persist the iteration result:
+## Phase 9: Save Iteration
 
-```
-.skill-optimizer/
-  baselines/<workflow-id>/<date>.md
-  iterations/<workflow-id>/<date>-iter-<N>.md
-  learnings/<workflow-id>/failure-catalog.md
-```
+Write to `.skill-optimizer/{workflow-id}/iterations/iter-{N}.md`:
 
-Iteration file format:
 ```markdown
-# Iteration N — <date>
+# Iteration {N} — {date}
 
 ## Changes Made
-- [Description of fixes applied]
+- {description of fixes applied}
 
 ## Results
 | Metric | Before | After | Delta |
 |--------|--------|-------|-------|
 | Success Rate | 60% | 80% | +20% |
-| Avg Turns | 28.5 | 20.2 | -8.3 |
-| ...
+| Avg Duration | 185s | 120s | -65s |
 
 ## Failure Distribution
 | Category | Before | After | Delta |
 |----------|--------|-------|-------|
 | TIMEOUT | 3 | 1 | -2 |
-| ...
 ```
 
-Append new failure patterns to `failure-catalog.md` for future reference.
+Update `.skill-optimizer/{workflow-id}/baseline.md` with the new metrics.
 
-## Phase 9: Stagnation Check
+---
 
-Track consecutive iterations with no improvement.
+## Phase 10: Stagnation Check
 
-If `stagnation_count >= stagnation_limit`:
-- STOP — diminishing returns
+Track consecutive iterations with no improvement (success rate didn't increase).
+
+If `stagnation_count >= stagnation_limit` → **STOP**.
 - Report what was achieved vs target
-- Suggest manual review of remaining failures
+- List remaining failure categories
+
+Otherwise, loop back to Phase 3.
+
+---
+
+## Storage Layout
+
+```
+.skill-optimizer/
+  {workflow-id}/
+    baseline.md              # Latest aggregate metrics
+    iterations/
+      iter-1.md              # Per-iteration changes + results
+      iter-2.md
+    failure-catalog.md       # Accumulated failure patterns + fixes
+```
+
+Append new failure patterns to `failure-catalog.md` after each iteration:
+
+```markdown
+## TIMEOUT
+- **Pattern**: Turn limit exceeded at 30 turns
+- **Root cause**: Too many sequential commands
+- **Fix applied**: Chained commands with &&
+- **Date**: {date}
+```
+
+---
 
 ## Final Report
 
@@ -156,12 +315,12 @@ If `stagnation_count >= stagnation_limit`:
 OPTIMIZATION SUMMARY
 ============================================================
   Converged    : YES/NO
-  Iterations   : N
-  Total Runs   : M
+  Iterations   : {N}
+  Total Runs   : {N * runs_per_iteration}
   Initial Rate : XX.X%
   Final Rate   : XX.X%
   Improvement  : +XX.X%
 ============================================================
 ```
 
-If converged, suggest committing the changes. If not, list remaining failure categories that need attention.
+If converged, suggest committing the changes. If not, list remaining failure categories.

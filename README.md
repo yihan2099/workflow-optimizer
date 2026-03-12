@@ -2,66 +2,74 @@
 
 A methodology for iteratively measuring and optimizing agent workflows. Defined as markdown skills that any LLM agent can pick up and execute.
 
-## What This Is
+## Architecture
 
-A set of composable skills that implement a closed-loop optimization cycle:
+The primary skill is **optimize** — a single, self-contained closed-loop that runs the full cycle:
 
 ```
-measure → categorize failures → fix → remeasure → compare → repeat
+measure → categorize → fix → remeasure → compare → repeat
 ```
 
-Each skill is a standalone `.md` file with clear inputs, steps, and outputs. An agent reads the skill, follows the steps, and produces structured results.
+Individual skills (measure, categorize, compare, baseline) work standalone for one-off tasks but do NOT call each other. The optimize skill has all logic inline — no skill-to-skill invocation required.
 
 ## Skills
 
-| Skill | Description |
-|-------|-------------|
-| [measure](skills/measure.md) | Run a workflow N times, collect metrics |
-| [categorize](skills/categorize.md) | Bucket failures into actionable categories |
-| [compare](skills/compare.md) | Diff two baselines, compute deltas |
-| [optimize](skills/optimize.md) | Full loop: measure → fix → remeasure until target met |
-| [baseline](skills/baseline.md) | Persist and load metric snapshots |
+| Skill | Purpose | Standalone? |
+|-------|---------|-------------|
+| [optimize](skills/optimize.md) | Full loop: measure → fix → remeasure until target met | Yes — primary entry point |
+| [measure](skills/measure.md) | Run a workflow N times, collect metrics | Yes |
+| [categorize](skills/categorize.md) | Bucket failures into actionable categories | Yes |
+| [compare](skills/compare.md) | Diff two metric snapshots | Yes |
+| [baseline](skills/baseline.md) | Persist and load metric snapshots | Yes |
 
 ## Quick Start
 
-Point any agent at the `optimize` skill with your workflow definition:
-
+### Full optimization loop
 ```
-/optimize my-workflow --runs 5 --target-rate 0.8
+/optimize path/to/workflow.md --runs 5 --target-rate 0.8
 ```
 
-The agent will:
-1. Run your workflow 5 times
-2. Compute success rate, duration, cost
-3. Categorize failures (AUTH, TIMEOUT, UI_CHANGE, etc.)
-4. Apply fixes (using your provided fixer instructions)
-5. Re-run and compare
-6. Repeat until 80% success rate or max iterations
+### Measure only (no fixes)
+```
+/optimize path/to/workflow.md --runs 5 --baseline-only
+```
+
+### One-off measurement
+```
+/measure path/to/workflow.md --runs 10
+```
 
 ## Workflow Definition
 
-Each workflow needs a `workflow.md` in its directory:
+Each workflow needs a directory with at minimum a `workflow.md`:
 
 ```
-.skill-optimizer/
-  workflows/
-    my-workflow/
-      workflow.md       # How to run it, what success looks like
-      fixtures.md       # Test inputs
-      fixer.md          # How to fix each failure category
-  baselines/
-    my-workflow/
-      2026-02-28.md     # Metric snapshots
-  learnings/
-    my-workflow/
-      failure-catalog.md
+my-workflow/
+  workflow.md       # Run command, success criteria, fixtures, constraints
+  fixer.md          # (Optional) How to fix each failure category
 ```
 
 See [workflow-definition.md](workflow-definition.md) for the full spec.
 
+## Storage
+
+All optimization data is stored in `.skill-optimizer/` relative to where the skill is invoked:
+
+```
+.skill-optimizer/
+  {workflow-id}/
+    baseline.md              # Latest aggregate metrics
+    snapshots/
+      {date}.md              # Historical snapshots
+    iterations/
+      iter-1.md              # Per-iteration changes + results
+    failure-catalog.md       # Accumulated failure patterns + fixes
+```
+
 ## Principles
 
-- **Methodology over code** — Skills describe *what to do*, not *how to implement it*
+- **Self-contained skills** — Each skill has all logic inline, no cross-skill invocation
 - **Agent-native** — Written for LLM agents to follow, not humans to run
-- **Composable** — Each skill works standalone or as part of the optimize loop
-- **Universal** — Works with any runtime: shell commands, agent SDKs, HTTP APIs
+- **File-based data flow** — Results persist to `.skill-optimizer/` as markdown files
+- **Parallel-capable** — Measurement runs can use Agent tool for concurrency
+- **Universal** — Works with shell commands, agent prompts, or HTTP APIs
