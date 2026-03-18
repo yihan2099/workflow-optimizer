@@ -12,31 +12,38 @@ measure → categorize → fix → remeasure → compare → repeat
 
 Individual skills (measure, categorize, compare, baseline) work standalone for one-off tasks but do NOT call each other. The optimize skill has all logic inline — no skill-to-skill invocation required.
 
+## Install as Claude Code Plugin
+
+```
+/plugin marketplace add yihan2099/workflow-optimizer
+/plugin install workflow-optimizer@workflow-optimizer
+```
+
 ## Skills
 
 | Skill | Purpose | Standalone? |
 |-------|---------|-------------|
-| [optimize](skills/optimize.md) | Full loop: measure → fix → remeasure until target met | Yes — primary entry point |
-| [measure](skills/measure.md) | Run a workflow N times, collect metrics | Yes |
-| [categorize](skills/categorize.md) | Bucket failures into actionable categories | Yes |
-| [compare](skills/compare.md) | Diff two metric snapshots | Yes |
-| [baseline](skills/baseline.md) | Persist and load metric snapshots | Yes |
+| [optimize](skills/optimize/SKILL.md) | Full loop: measure → fix → remeasure until target met | Yes — primary entry point |
+| [measure](skills/measure/SKILL.md) | Run a workflow N times, collect metrics | Yes |
+| [categorize](skills/categorize/SKILL.md) | Bucket failures into actionable categories | Yes |
+| [compare](skills/compare/SKILL.md) | Diff two metric snapshots | Yes |
+| [baseline](skills/baseline/SKILL.md) | Persist and load metric snapshots | Yes |
 
 ## Quick Start
 
 ### Full optimization loop
 ```
-/optimize path/to/workflow.md --runs 5 --target-rate 0.8
+/workflow-optimizer:optimize path/to/workflow.md --runs 5 --target-rate 0.8
 ```
 
 ### Measure only (no fixes)
 ```
-/optimize path/to/workflow.md --runs 5 --baseline-only
+/workflow-optimizer:optimize path/to/workflow.md --runs 5 --baseline-only
 ```
 
 ### One-off measurement
 ```
-/measure path/to/workflow.md --runs 10
+/workflow-optimizer:measure path/to/workflow.md --runs 10
 ```
 
 ## Workflow Definition
