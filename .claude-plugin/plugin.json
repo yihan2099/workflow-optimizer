@@ -1,0 +1,10 @@
+{
+  "name": "workflow-optimizer",
+  "description": "Closed-loop workflow optimization — measure, categorize failures, fix, and re-measure until target success rate",
+  "version": "1.0.0",
+  "author": {
+    "name": "yihan2099"
+  },
+  "repository": "https://github.com/yihan2099/workflow-optimizer",
+  "license": "MIT"
+}

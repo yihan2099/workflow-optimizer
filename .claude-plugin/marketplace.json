@@ -1,0 +1,13 @@
+{
+  "name": "workflow-optimizer",
+  "owner": {
+    "name": "yihan2099"
+  },
+  "plugins": [
+    {
+      "name": "workflow-optimizer",
+      "source": "./",
+      "description": "Closed-loop workflow optimization — measure, categorize failures, fix, and re-measure until target success rate"
+    }
+  ]
+}
